@@ -1,0 +1,50 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "8e687840-b448-47fb-be35-3916f5636816",
+  "developer": {
+    "name": "TeamsSimple Developer",
+    "websiteUrl": "https://localhost:3000",
+    "privacyUrl": "https://localhost:3000/privacy",
+    "termsOfUseUrl": "https://localhost:3000/termsofuse"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Teams Simple",
+    "full": "Simple Teams App with MSAL Authentication"
+  },
+  "description": {
+    "short": "A simple Teams app with MSAL authentication",
+    "full": "A simple Microsoft Teams application that demonstrates MSAL popup authentication with success/failure display"
+  },
+  "accentColor": "#FFFFFF",
+  "staticTabs": [
+    {
+      "entityId": "teams-simple-tab",
+      "name": "Teams Simple",
+      "contentUrl": "https://localhost:3000",
+      "websiteUrl": "https://localhost:3000",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "localhost:3000",
+    "login.microsoftonline.com"
+  ],
+  "webApplicationInfo": {
+    "id": "8e687840-b448-47fb-be35-3916f5636816",
+    "resource": "api://localhost:3000/8e687840-b448-47fb-be35-3916f5636816"
+  }
+}
