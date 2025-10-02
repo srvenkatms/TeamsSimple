@@ -1,0 +1,51 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.1",
+  "id": "8e687840-b448-47fb-be35-3916f5636816",
+  "developer": {
+    "name": "TeamsSimple Developer",
+    "websiteUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+    "privacyUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net/privacy",
+    "termsOfUseUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Teams Simple Auth",
+    "full": "Simple Teams App with MSAL Authentication"
+  },
+  "description": {
+    "short": "A simple Teams app with MSAL authentication",
+    "full": "A simple Microsoft Teams application that demonstrates MSAL popup authentication with success/failure display"
+  },
+  "accentColor": "#0078d4",
+  "staticTabs": [
+    {
+      "entityId": "teams-simple-tab",
+      "name": "Authentication Demo",
+      "contentUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+      "websiteUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+    "login.microsoftonline.com",
+    "*.azurewebsites.net"
+  ],
+  "webApplicationInfo": {
+    "id": "8e687840-b448-47fb-be35-3916f5636816",
+    "resource": "api://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net/8e687840-b448-47fb-be35-3916f5636816"
+  }
+}
