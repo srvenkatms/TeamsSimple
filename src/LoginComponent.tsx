@@ -25,20 +25,28 @@ const LoginComponent: React.FC = () => {
         const hasTeamsContext = window.location.search.includes('teams') || 
                                window.location.href.includes('teams');
 
-        // Smart Teams detection: Strong Teams indicators OR (iframe + weak indicators)
-        const hasStrongTeamsIndicators = hasTeamsOrigin || hasTeamsUserAgent;
-        const hasWeakTeamsIndicators = hasTeamsContext;
+        // Teams Detection: Use Teams SDK when in Teams environment (UserAgent detected)
+        // Teams can run apps in iframe OR as full tab/window - both need Teams SDK
+        const inTeamsEnvironment = hasTeamsUserAgent;
+        const isTeamsIframeContext = inIframe && hasTeamsOrigin;
+        const isTeamsTabContext = hasTeamsUserAgent && !inIframe;
         
-        const teamsDetected = hasStrongTeamsIndicators || 
-                             (inIframe && hasWeakTeamsIndicators) ||
-                             (inIframe && window.location.hostname.includes('teams'));
-        setIsInTeams(teamsDetected);
+        // Use Teams SDK for any Teams context (iframe or tab/window)
+        const shouldUseTeamsSDK = inTeamsEnvironment;
+        
+        setIsInTeams(shouldUseTeamsSDK);
+        
+        console.log('=== Teams Detection Analysis ===');
+        console.log('- Teams Environment (UserAgent):', inTeamsEnvironment);
+        console.log('- Teams iframe Context:', isTeamsIframeContext);
+        console.log('- Teams Tab/Window Context:', isTeamsTabContext);
+        console.log('- Will use Teams SDK:', shouldUseTeamsSDK);
+        console.log('- Will use MSAL:', !shouldUseTeamsSDK);
         console.log('Teams context detection details:');
         console.log('- inIframe:', inIframe);
         console.log('- hasTeamsOrigin:', hasTeamsOrigin);
         console.log('- hasTeamsUserAgent:', hasTeamsUserAgent);
         console.log('- hasTeamsContext:', hasTeamsContext);
-        console.log('- teamsDetected:', teamsDetected);
         
         // Store detection info for debugging
         localStorage.setItem('debugInfo', JSON.stringify({
@@ -46,13 +54,16 @@ const LoginComponent: React.FC = () => {
           hasTeamsOrigin,
           hasTeamsUserAgent,
           hasTeamsContext,
-          teamsDetected,
+          teamsDetected: shouldUseTeamsSDK,
+          inTeamsEnvironment,
+          isTeamsIframeContext,
+          isTeamsTabContext,
           userAgent: navigator.userAgent,
           url: window.location.href
         }));
 
-        // Check if there's a stored Teams login state
-        if (teamsDetected) {
+        // Check if there's a stored Teams login state (for any Teams context)
+        if (shouldUseTeamsSDK) {
           const storedLogin = localStorage.getItem('teamsLoggedIn');
           const storedUserInfo = localStorage.getItem('teamsUserInfo');
           if (storedLogin === 'true') {
@@ -72,17 +83,56 @@ const LoginComponent: React.FC = () => {
 
   // Handle redirect response
   useEffect(() => {
-    const handleRedirectResponse = async () => {
+    const handleAuthResponse = async () => {
       try {
-        // Wait a bit to ensure MSAL is ready
+        // Check if we have a Teams authentication code in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const authCode = urlParams.get('code');
+        const error = urlParams.get('error');
+        const state = urlParams.get('state');
+        
+        if (authCode && state === '12345') {
+          // Teams authentication succeeded - we have the authorization code
+          console.log('Teams authentication code received:', authCode.substring(0, 50) + '...');
+          
+          setIsTeamsLoggedIn(true);
+          setTeamsUserInfo('Teams User');
+          setLoginMessage('Login Successful! Authentication completed via Teams SDK.');
+          
+          // Store login state in localStorage for persistence
+          localStorage.setItem('teamsLoggedIn', 'true');
+          localStorage.setItem('teamsUserInfo', 'Teams User');
+          
+          // Clean up URL by removing query parameters
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        } else if (error) {
+          console.error('Teams authentication error in URL:', error);
+          setLoginMessage('Login Failed: ' + error);
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          return;
+        }
+        
+        // Handle MSAL redirect responses (for browser context)
         await new Promise(resolve => setTimeout(resolve, 100));
         
         const response = await instance.handleRedirectPromise();
         if (response && response.account) {
+          console.log('MSAL redirect authentication successful:', response);
+          
+          // If we're in Teams context, set Teams login state
+          if (isInTeams) {
+            setIsTeamsLoggedIn(true);
+            setTeamsUserInfo(response.account.name || response.account.username || 'Teams User');
+            localStorage.setItem('teamsLoggedIn', 'true');
+            localStorage.setItem('teamsUserInfo', response.account.name || 'Teams User');
+          }
+          
           setLoginMessage(`Login Successful! Welcome ${response.account.name || response.account.username}`);
         }
       } catch (error) {
-        console.error('Error handling redirect response:', error);
+        console.error('Error handling authentication response:', error);
         const errorMessage = (error as any).message || error;
         if (!errorMessage.includes('uninitialized_public_client_application')) {
           setLoginMessage('Login Failed: ' + errorMessage);
@@ -90,89 +140,189 @@ const LoginComponent: React.FC = () => {
       }
     };
 
-    // Only handle redirect response if we have accounts or are returning from auth
-    if (accounts.length > 0 || window.location.search.includes('code=') || window.location.hash.includes('access_token')) {
-      handleRedirectResponse();
+    // Handle auth response if we have codes or are returning from auth
+    if (accounts.length > 0 || 
+        window.location.search.includes('code=') || 
+        window.location.hash.includes('access_token') ||
+        window.location.search.includes('error=')) {
+      handleAuthResponse();
     }
-  }, [instance, accounts.length]);
+  }, [instance, accounts.length, isInTeams]);
 
   const handleLogin = async () => {
     try {
       setLoginMessage('Initiating login...');
       
       if (isInTeams) {
-        // Use Teams SDK authentication for Teams context
+        // Use Teams SDK authentication for Teams context (the working approach)
         console.log('Using Teams SDK authentication for Teams context');
         console.log('isInTeams state:', isInTeams);
         
+        setLoginMessage('Opening Teams authentication popup...');
+        
         try {
-          // Step 1: Initialize Teams SDK
-          setLoginMessage('Step 1: Initializing Teams SDK...');
+          // Initialize Teams SDK and check context first
+          await microsoftTeams.app.initialize();
           
+          // Get the current Teams context to check if authentication is allowed
+          let teamsContext;
           try {
-            await microsoftTeams.app.initialize();
-            setLoginMessage('Step 2: Teams SDK initialized, getting context...');
-          } catch (initError) {
-            setLoginMessage('Step 1 Error: Teams SDK init failed: ' + (initError as Error).message);
-            throw initError;
-          }
-          
-          // Step 2: Get Teams context
-          let context;
-          try {
-            context = await microsoftTeams.app.getContext();
-            setLoginMessage('Step 3: Teams context ready, starting authentication...');
+            teamsContext = await microsoftTeams.app.getContext();
+            console.log('Teams context:', teamsContext);
           } catch (contextError) {
-            setLoginMessage('Step 2 Error: Teams context failed: ' + (contextError as Error).message);
-            // Continue with authentication anyway
+            console.log('Could not get Teams context:', contextError);
           }
           
-          // Step 3: Teams authentication
-          setLoginMessage('Step 4: Opening authentication dialog...');
+          // Check if we're in a context that supports authentication
+          const currentFrameContext = (teamsContext as any)?.page?.frameContext || 'unknown';
+          console.log('Current frame context:', currentFrameContext);
           
-          // Use Teams-compatible authentication URL with proper redirect URI
-          const redirectUri = `${window.location.origin}/auth-end`;
-          const authUrl = `https://login.microsoftonline.com/${process.env.REACT_APP_AZURE_TENANT_ID}/oauth2/v2.0/authorize?` +
-            `client_id=${process.env.REACT_APP_AZURE_CLIENT_ID}` +
-            `&response_type=id_token token` +
-            `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-            `&scope=openid profile User.Read` +
-            `&response_mode=fragment` +
-            `&state=12345` +
-            `&nonce=678910`;
+          const allowedContexts = ['content', 'sidePanel', 'settings', 'remove', 'task', 'stage', 'meetingStage'];
           
-          setLoginMessage('Step 4b: Authentication URL prepared, opening dialog...');
-          
-          try {
+          if (allowedContexts.includes(currentFrameContext)) {
+            console.log('Teams context allows authentication, using Teams SDK');
+            
+            // Generate PKCE parameters for secure authentication
+            const generateCodeVerifier = () => {
+              const array = new Uint8Array(32);
+              crypto.getRandomValues(array);
+              return btoa(String.fromCharCode.apply(null, Array.from(array)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            };
+            
+            const generateCodeChallenge = async (verifier: string) => {
+              const encoder = new TextEncoder();
+              const data = encoder.encode(verifier);
+              const digest = await crypto.subtle.digest('SHA-256', data);
+              return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            };
+            
+            const codeVerifier = generateCodeVerifier();
+            const codeChallenge = await generateCodeChallenge(codeVerifier);
+            
+            // Store code verifier for token exchange (though we're not doing token exchange in this demo)
+            localStorage.setItem('codeVerifier', codeVerifier);
+            
+            // Use Teams SDK authentication with PKCE
             const authResult = await microsoftTeams.authentication.authenticate({
-              url: authUrl,
+              url: `https://login.microsoftonline.com/${process.env.REACT_APP_AZURE_TENANT_ID}/oauth2/v2.0/authorize?` +
+                   `client_id=${process.env.REACT_APP_AZURE_CLIENT_ID}` +
+                   `&response_type=code` +
+                   `&redirect_uri=${encodeURIComponent(window.location.origin)}` +
+                   `&scope=${encodeURIComponent('https://graph.microsoft.com/User.Read openid profile')}` +
+                   `&response_mode=query` +
+                   `&state=12345` +
+                   `&code_challenge=${codeChallenge}` +
+                   `&code_challenge_method=S256`,
               width: 600,
               height: 535
             });
             
-            setLoginMessage('Step 5: Processing authentication result...');
-            console.log('Teams auth result:', authResult);
-          } catch (authError) {
-            setLoginMessage('Step 4 Error: Authentication dialog failed: ' + (authError as Error).message);
-            throw authError;
+            console.log('Teams authentication successful:', authResult);
+            setIsTeamsLoggedIn(true);
+            setTeamsUserInfo('Teams User');
+            setLoginMessage('Login Successful! Authentication completed via Teams SDK.');
+            localStorage.setItem('teamsLoggedIn', 'true');
+            localStorage.setItem('teamsUserInfo', 'Teams User');
+            
+          } else {
+            console.log('Teams context does not allow authentication, using MSAL popup fallback');
+            setLoginMessage('Teams context restricts authentication, trying alternative method...');
+            
+            // Fallback to MSAL popup when Teams context doesn't allow authentication
+            const response = await instance.loginPopup({
+              scopes: ['User.Read', 'openid', 'profile'],
+              prompt: 'select_account'
+            });
+            
+            if (response.account) {
+              setIsTeamsLoggedIn(true);
+              setTeamsUserInfo(response.account.name || response.account.username || 'Teams User');
+              setLoginMessage(`Login Successful! Welcome ${response.account.name || response.account.username}`);
+              localStorage.setItem('teamsLoggedIn', 'true');
+              localStorage.setItem('teamsUserInfo', response.account.name || 'Teams User');
+            } else {
+              setLoginMessage('Login Failed: No account returned from authentication');
+            }
           }
           
-          // Set Teams login state
-          setIsTeamsLoggedIn(true);
-          setTeamsUserInfo('Teams User'); // We could parse the token for more info
-          setLoginMessage('Login Successful! Authentication completed via Teams SDK.');
-          
-          // Store login state in localStorage for persistence
-          localStorage.setItem('teamsLoggedIn', 'true');
-          localStorage.setItem('teamsUserInfo', 'Teams User');
-          
         } catch (teamsAuthError) {
-          console.error('Teams SDK authentication failed:', teamsAuthError);
-          setIsTeamsLoggedIn(false);
-          setTeamsUserInfo('');
-          localStorage.removeItem('teamsLoggedIn');
-          localStorage.removeItem('teamsUserInfo');
-          setLoginMessage('Login Failed: Teams authentication error - ' + (teamsAuthError as Error).message);
+          console.error('Teams authentication failed:', teamsAuthError);
+          const errorMessage = (teamsAuthError as Error).message;
+          
+          // Check for different types of Teams authentication errors
+          if (errorMessage.includes('popup_window_error') || 
+              errorMessage.includes('popup') ||
+              errorMessage.includes('blocked')) {
+            
+            console.log('Popup blocked error detected, trying MSAL popup as fallback');
+            setLoginMessage('Popup blocked in Teams, trying alternative authentication method...');
+            
+            try {
+              const response = await instance.loginPopup({
+                scopes: ['User.Read', 'openid', 'profile'],
+                prompt: 'select_account'
+              });
+              
+              if (response.account) {
+                setIsTeamsLoggedIn(true);
+                setTeamsUserInfo(response.account.name || response.account.username || 'Teams User');
+                setLoginMessage(`Login Successful! Welcome ${response.account.name || response.account.username}`);
+                localStorage.setItem('teamsLoggedIn', 'true');
+                localStorage.setItem('teamsUserInfo', response.account.name || 'Teams User');
+              } else {
+                setLoginMessage('Login Failed: No account returned from authentication');
+              }
+            } catch (msalError) {
+              setIsTeamsLoggedIn(false);
+              setTeamsUserInfo('');
+              localStorage.removeItem('teamsLoggedIn');
+              localStorage.removeItem('teamsUserInfo');
+              
+              const msalErrorMsg = (msalError as Error).message;
+              if (msalErrorMsg.includes('popup') || msalErrorMsg.includes('blocked')) {
+                setLoginMessage('Popups are blocked. Please allow popups for this site or try refreshing the page.');
+              } else {
+                setLoginMessage('Login Failed: ' + msalErrorMsg);
+              }
+            }
+          } else if (errorMessage.includes('only allowed in following contexts') || 
+                     errorMessage.includes('Current context:')) {
+            
+            console.log('Context restriction detected, falling back to MSAL popup');
+            setLoginMessage('Teams context restrictions detected, using alternative authentication...');
+            
+            try {
+              const response = await instance.loginPopup({
+                scopes: ['User.Read', 'openid', 'profile'],
+                prompt: 'select_account'
+              });
+              
+              if (response.account) {
+                setIsTeamsLoggedIn(true);
+                setTeamsUserInfo(response.account.name || response.account.username || 'Teams User');
+                setLoginMessage(`Login Successful! Welcome ${response.account.name || response.account.username}`);
+                localStorage.setItem('teamsLoggedIn', 'true');
+                localStorage.setItem('teamsUserInfo', response.account.name || 'Teams User');
+              } else {
+                setLoginMessage('Login Failed: No account returned from authentication');
+              }
+            } catch (msalError) {
+              setIsTeamsLoggedIn(false);
+              setTeamsUserInfo('');
+              localStorage.removeItem('teamsLoggedIn');
+              localStorage.removeItem('teamsUserInfo');
+              setLoginMessage('Login Failed: ' + (msalError as Error).message);
+            }
+          } else {
+            // Other errors
+            setIsTeamsLoggedIn(false);
+            setTeamsUserInfo('');
+            localStorage.removeItem('teamsLoggedIn');
+            localStorage.removeItem('teamsUserInfo');
+            setLoginMessage('Login Failed: Teams authentication error - ' + errorMessage);
+          }
         }
         
       } else {
@@ -275,6 +425,8 @@ const LoginComponent: React.FC = () => {
 
   const isLoggedIn = isInTeams ? isTeamsLoggedIn : accounts.length > 0;
 
+
+
   // Get debug info for display
   const debugInfo = JSON.parse(localStorage.getItem('debugInfo') || '{}');
 
@@ -346,7 +498,8 @@ const LoginComponent: React.FC = () => {
             color: loginMessage.includes('Successful') ? '#155724' : '#721c24',
             border: `1px solid ${loginMessage.includes('Successful') ? '#c3e6cb' : '#f5c6cb'}`,
             borderRadius: '4px',
-            display: 'inline-block'
+            display: 'inline-block',
+            maxWidth: '600px'
           }}
         >
           {loginMessage}

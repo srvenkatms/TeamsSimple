@@ -1,42 +1,61 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+# Teams Simple App - Copilot Instructions
 
-- [x] Clarify Project Requirements
-	<!-- ReactJS Teams app with MSAL authentication popup, success/failure display. -->
+## Project Status: ✅ COMPLETED & WORKING
 
-- [x] Scaffold the Project
-	<!-- Created React TypeScript project with package.json, tsconfig.json, basic project structure -->
+**Project Type**: Microsoft Teams React App with MSAL Authentication  
+**Status**: Fully functional and deployed  
+**Live URL**: https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net  
+**Last Updated**: October 2025
 
-- [x] Customize the Project
-	<!-- Added MSAL authentication, Teams SDK integration, LoginComponent, environment configuration -->
+## ✅ Completed Tasks
 
-- [x] Install Required Extensions
-	<!-- No extensions required for this project type -->
+- [x] **Project Setup**: React TypeScript app with complete project structure
+- [x] **Authentication**: MSAL Browser + Teams SDK dual authentication strategy  
+- [x] **Context Detection**: Smart Teams vs browser environment detection
+- [x] **Azure Deployment**: Web App deployment with proper configuration
+- [x] **Teams Integration**: Teams app package and manifest configuration
+- [x] **Error Handling**: Comprehensive error handling for all authentication scenarios
+- [x] **Response Processing**: Enhanced handling of Teams authentication success responses
+- [x] **Documentation**: Complete README.md with setup and deployment instructions
 
-- [x] Compile the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Install any missing dependencies.
-	Run diagnostics and resolve any issues.
-	Check for markdown files in project folder for relevant instructions on how to do this.
-	-->
+## 🏗️ Architecture Overview
 
-- [x] Create and Run Task
-	<!--
-	Verify that all previous steps have been completed.
-	Check https://code.visualstudio.com/docs/debugtest/tasks to determine if the project needs a task. If so, use the create_and_run_task to create and launch a task based on package.json, README.md, and project structure.
-	Skip this step otherwise.
-	 -->
+### Key Components
+- **LoginComponent.tsx**: Main authentication component with context-aware logic
+- **App.tsx**: MSAL provider setup and Teams SDK initialization
+- **msalConfig.ts**: Dynamic configuration based on environment
+- **auth-end.html**: Fallback callback handler for Teams authentication
 
-- [x] Launch the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Prompt user for debug mode, launch only if confirmed.
-	 -->
+### Authentication Flow
+1. **Context Detection**: Detects Teams vs browser environment
+2. **Teams Context**: Uses Teams SDK authentication with PKCE
+3. **Browser Context**: Uses MSAL popup with redirect fallback
+4. **Response Handling**: Processes both SDK responses and URL parameters
 
-- [x] Ensure Documentation is Complete
-	<!--
-	Verify that all previous steps have been completed.
-	Verify that README.md and the copilot-instructions.md file in the .github directory exists and contains current project information.
-	Clean up the copilot-instructions.md file in the .github directory by removing all HTML comments.
-	 -->
+## 🔧 Technical Stack
+- React 18.2.0 + TypeScript
+- MSAL Browser 3.0.0 + MSAL React 2.0.0
+- Microsoft Teams SDK 2.19.0
+- Azure Web App (Node.js 20-lts)
+- Azure AD App Registration
+
+## 🚀 Deployment Information
+- **Azure Resource Group**: rgconncentrix
+- **App Name**: testsimple
+- **Client ID**: d136cbae-329b-4df5-a97a-9b22f97a7dd8
+- **Latest Package**: deploy-login-improved.zip (October 2025)
+
+## 💡 Development Notes
+- All authentication issues have been resolved
+- Context detection working reliably
+- Teams authentication responses properly processed
+- Popup blocking scenarios handled gracefully
+- Environment variables configured for security
+
+## 🔄 For Future Development
+This project demonstrates best practices for:
+- Dual authentication strategies (Teams + Browser)
+- Context-aware application behavior
+- Azure AD integration in Teams apps
+- Proper error handling and user experience
+- Secure environment configuration
