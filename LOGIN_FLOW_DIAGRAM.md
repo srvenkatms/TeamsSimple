@@ -1,13 +1,15 @@
-# MSAL Login Flow and Component Architecture
+# Teams Simple App - Authentication Flow and Architecture
 
-**Project Root**: `C:\Yr2026\concentrix\TeamsSimple\`
+**Project Root**: `C:\Yr2026\concentrix\TeamsSimple\`  
+**Live URL**: `https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net`  
+**Azure AD Client ID**: `d136cbae-329b-4df5-a97a-9b22f97a7dd8`
 
 **Key Files**:
 - `src/index.tsx` - React app entry point
-- `src/App.tsx` - Main app component with Teams SDK
-- `src/LoginComponent.tsx` - MSAL authentication component
-- `src/msalConfig.ts` - MSAL configuration
-- `teams/manifest.json` - Teams app manifest
+- `src/App.tsx` - Main app with MSAL & Teams SDK initialization
+- `src/LoginComponent.tsx` - Smart authentication component (Teams SDK + MSAL)
+- `src/msalConfig.ts` - MSAL configuration with context detection
+- `teams-package/manifest.json` - Updated Teams app manifest
 - `.env` - Environment variables
 - `public/index.html` - HTML template
 
@@ -44,7 +46,7 @@
 │  ┌─────────────────────────────────────────────────────────────┐ │
 │  │     src/msalConfig.ts (Teams-Aware Configuration)          │ │
 │  │                                                             │ │
-│  │ • clientId: 8e687840-b448-47fb-be35-3916f5636816          │ │
+│  │ • clientId: d136cbae-329b-4df5-a97a-9b22f97a7dd8          │ │
 │  │ • authority: login.microsoftonline.com/[tenant]            │ │
 │  │ • redirectUri: getRedirectUri() [DYNAMIC]                  │ │
 │  │   ├─ Teams: REACT_APP_TEAMS_REDIRECT_URI                   │ │
@@ -95,7 +97,45 @@ App Initialization:
 └─────────────────────────────────────────────────┘
 ```
 
-## 3. Detailed Login Flow Sequence
+## 3. Dual Authentication Strategy
+
+```
+App Context Detection:
+┌─────────────┐
+│   App Load  │
+└─────────────┘
+       │
+       ▼
+┌─────────────────────────────────────┐
+│        Context Detection            │
+│                                     │
+│  ┌─────────────┐  ┌─────────────┐   │
+│  │  isInTeams  │  │ Check iframe│   │
+│  │ Detection   │  │ ancestors   │   │
+│  └─────────────┘  └─────────────┘   │
+└─────────────────────────────────────┘
+       │
+       ▼
+┌─────────────┐         ┌─────────────┐
+│   Teams     │         │  Browser    │
+│  Context    │         │  Context    │
+└─────────────┘         └─────────────┘
+       │                        │
+       ▼                        ▼
+┌─────────────┐         ┌─────────────┐
+│Teams SDK    │         │    MSAL     │
+│Authentication│         │ Popup/Redirect│
+└─────────────┘         └─────────────┘
+       │                        │
+       ▼                        ▼
+┌─────────────┐         ┌─────────────┐
+│microsoftTeams│         │ instance.   │
+│.authentication│         │ loginPopup()│
+│.authenticate()│         │             │
+└─────────────┘         └─────────────┘
+```
+
+## 4. Detailed Login Flow Sequence
 
 ```
 User Action          Component              MSAL Library           Azure AD

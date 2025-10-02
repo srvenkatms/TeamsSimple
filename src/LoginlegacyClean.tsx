@@ -3,7 +3,7 @@ import { useMsal } from '@azure/msal-react';
 import { loginRequest } from './msalConfig';
 import * as microsoftTeams from '@microsoft/teams-js';
 
-const LoginComponent: React.FC = () => {
+const LoginLegacyClean: React.FC = () => {
   const { instance, accounts } = useMsal();
   const [loginMessage, setLoginMessage] = useState<string>('');
   const [isInTeams, setIsInTeams] = useState<boolean>(false);
@@ -25,32 +25,10 @@ const LoginComponent: React.FC = () => {
         const hasTeamsContext = window.location.search.includes('teams') || 
                                window.location.href.includes('teams');
 
-        // Smart Teams detection: Strong Teams indicators OR (iframe + weak indicators)
-        const hasStrongTeamsIndicators = hasTeamsOrigin || hasTeamsUserAgent;
-        const hasWeakTeamsIndicators = hasTeamsContext;
-        
-        const teamsDetected = hasStrongTeamsIndicators || 
-                             (inIframe && hasWeakTeamsIndicators) ||
-                             (inIframe && window.location.hostname.includes('teams'));
+        const teamsDetected = inIframe && (hasTeamsOrigin || hasTeamsUserAgent || hasTeamsContext);
         setIsInTeams(teamsDetected);
-        console.log('Teams context detection details:');
-        console.log('- inIframe:', inIframe);
-        console.log('- hasTeamsOrigin:', hasTeamsOrigin);
-        console.log('- hasTeamsUserAgent:', hasTeamsUserAgent);
-        console.log('- hasTeamsContext:', hasTeamsContext);
-        console.log('- teamsDetected:', teamsDetected);
+        console.log('Teams context detected:', teamsDetected);
         
-        // Store detection info for debugging
-        localStorage.setItem('debugInfo', JSON.stringify({
-          inIframe,
-          hasTeamsOrigin,
-          hasTeamsUserAgent,
-          hasTeamsContext,
-          teamsDetected,
-          userAgent: navigator.userAgent,
-          url: window.location.href
-        }));
-
         // Check if there's a stored Teams login state
         if (teamsDetected) {
           const storedLogin = localStorage.getItem('teamsLoggedIn');
@@ -67,7 +45,7 @@ const LoginComponent: React.FC = () => {
       }
     };
 
-      detectTeamsContext();
+    detectTeamsContext();
   }, []);
 
   // Handle redirect response
@@ -103,59 +81,23 @@ const LoginComponent: React.FC = () => {
       if (isInTeams) {
         // Use Teams SDK authentication for Teams context
         console.log('Using Teams SDK authentication for Teams context');
-        console.log('isInTeams state:', isInTeams);
         
         try {
-          // Step 1: Initialize Teams SDK
-          setLoginMessage('Step 1: Initializing Teams SDK...');
-          
+          // Initialize Teams SDK first (if not already initialized)
           try {
             await microsoftTeams.app.initialize();
-            setLoginMessage('Step 2: Teams SDK initialized, getting context...');
           } catch (initError) {
-            setLoginMessage('Step 1 Error: Teams SDK init failed: ' + (initError as Error).message);
-            throw initError;
+            console.log('Teams SDK already initialized or not in Teams context');
           }
           
-          // Step 2: Get Teams context
-          let context;
-          try {
-            context = await microsoftTeams.app.getContext();
-            setLoginMessage('Step 3: Teams context ready, starting authentication...');
-          } catch (contextError) {
-            setLoginMessage('Step 2 Error: Teams context failed: ' + (contextError as Error).message);
-            // Continue with authentication anyway
-          }
+          // Use Teams SDK authentication - this returns a Promise<string> with the auth result
+          const authResult = await microsoftTeams.authentication.authenticate({
+            url: `https://login.microsoftonline.com/${process.env.REACT_APP_AZURE_TENANT_ID}/oauth2/v2.0/authorize?client_id=${process.env.REACT_APP_AZURE_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(window.location.origin)}&scope=https://graph.microsoft.com/User.Read%20openid%20profile&response_mode=query&state=12345`,
+            width: 600,
+            height: 535
+          });
           
-          // Step 3: Teams authentication
-          setLoginMessage('Step 4: Opening authentication dialog...');
-          
-          // Use Teams-compatible authentication URL with proper redirect URI
-          const redirectUri = `${window.location.origin}/auth-end`;
-          const authUrl = `https://login.microsoftonline.com/${process.env.REACT_APP_AZURE_TENANT_ID}/oauth2/v2.0/authorize?` +
-            `client_id=${process.env.REACT_APP_AZURE_CLIENT_ID}` +
-            `&response_type=id_token token` +
-            `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-            `&scope=openid profile User.Read` +
-            `&response_mode=fragment` +
-            `&state=12345` +
-            `&nonce=678910`;
-          
-          setLoginMessage('Step 4b: Authentication URL prepared, opening dialog...');
-          
-          try {
-            const authResult = await microsoftTeams.authentication.authenticate({
-              url: authUrl,
-              width: 600,
-              height: 535
-            });
-            
-            setLoginMessage('Step 5: Processing authentication result...');
-            console.log('Teams auth result:', authResult);
-          } catch (authError) {
-            setLoginMessage('Step 4 Error: Authentication dialog failed: ' + (authError as Error).message);
-            throw authError;
-          }
+          console.log('Teams authentication successful:', authResult);
           
           // Set Teams login state
           setIsTeamsLoggedIn(true);
@@ -178,7 +120,6 @@ const LoginComponent: React.FC = () => {
       } else {
         // Use popup flow for standalone browser
         console.log('Using popup flow for browser context');
-        console.log('isInTeams state:', isInTeams);
         
         try {
           const response = await instance.loginPopup(loginRequest);
@@ -221,8 +162,6 @@ const LoginComponent: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      console.log('Logout initiated, isInTeams:', isInTeams);
-      
       if (isInTeams) {
         // For Teams context, clear local state and show logged out message
         console.log('Logout in Teams context - clearing local state');
@@ -231,7 +170,6 @@ const LoginComponent: React.FC = () => {
         setLoginMessage('Logged out successfully from Teams app');
         
         // Clear any local authentication state
-        // Note: In Teams, we can't force logout from Azure AD, but we can clear local state
         localStorage.removeItem('teamsLoggedIn');
         localStorage.removeItem('teamsUserInfo');
         localStorage.clear();
@@ -245,8 +183,15 @@ const LoginComponent: React.FC = () => {
       } else {
         // Use popup flow for standalone browser
         console.log('Logout in browser context using MSAL');
-        await instance.logoutPopup();
-        setLoginMessage('');
+        
+        try {
+          await instance.logoutPopup();
+          setLoginMessage('');
+        } catch (logoutError) {
+          console.log('Popup logout failed, trying redirect:', logoutError);
+          // Fallback to redirect logout
+          await instance.logoutRedirect();
+        }
       }
     } catch (error) {
       console.error('Logout failed:', error);
@@ -273,35 +218,12 @@ const LoginComponent: React.FC = () => {
     }
   };
 
+  // Determine login status based on context
   const isLoggedIn = isInTeams ? isTeamsLoggedIn : accounts.length > 0;
-
-  // Get debug info for display
-  const debugInfo = JSON.parse(localStorage.getItem('debugInfo') || '{}');
 
   return (
     <div style={{ padding: '20px', textAlign: 'center' }}>
-      {/* Debug Information */}
-      {Object.keys(debugInfo).length > 0 && (
-        <div style={{ 
-          marginBottom: '20px', 
-          padding: '10px',
-          backgroundColor: '#f0f0f0',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          fontSize: '12px',
-          textAlign: 'left'
-        }}>
-          <strong>Debug Info:</strong><br/>
-          Teams Detected: {debugInfo.teamsDetected ? 'YES' : 'NO'}<br/>
-          In iFrame: {debugInfo.inIframe ? 'YES' : 'NO'}<br/>
-          Teams Origin: {debugInfo.hasTeamsOrigin ? 'YES' : 'NO'}<br/>
-          Teams UserAgent: {debugInfo.hasTeamsUserAgent ? 'YES' : 'NO'}<br/>
-          Teams Context: {debugInfo.hasTeamsContext ? 'YES' : 'NO'}<br/>
-          URL: {debugInfo.url}<br/>
-          UserAgent: {debugInfo.userAgent}
-        </div>
-      )}
-      
+      <h2>Legacy Login Component (Working Version)</h2>
       {!isLoggedIn ? (
         <button 
           onClick={handleLogin}
@@ -356,4 +278,4 @@ const LoginComponent: React.FC = () => {
   );
 };
 
-export default LoginComponent;
+export default LoginLegacyClean;

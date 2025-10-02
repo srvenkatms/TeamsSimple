@@ -2,7 +2,7 @@
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
   "manifestVersion": "1.17",
   "version": "1.0.1",
-  "id": "8e687840-b448-47fb-be35-3916f5636816",
+  "id": "d136cbae-329b-4df5-a97a-9b22f97a7dd8",
   "developer": {
     "name": "TeamsSimple Developer",
     "websiteUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
@@ -45,7 +45,7 @@
     "*.azurewebsites.net"
   ],
   "webApplicationInfo": {
-    "id": "8e687840-b448-47fb-be35-3916f5636816",
-    "resource": "api://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net/8e687840-b448-47fb-be35-3916f5636816"
+    "id": "d136cbae-329b-4df5-a97a-9b22f97a7dd8",
+    "resource": "api://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net/d136cbae-329b-4df5-a97a-9b22f97a7dd8"
   }
 }
