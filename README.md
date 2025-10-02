@@ -193,17 +193,336 @@ The app intelligently detects context and adjusts authentication:
 | `npm test` | Run tests |
 | `npm run serve` | Serve build directory locally |
 
-## 🔧 Deployment Commands
+## � Comprehensive Deployment Guide
 
+### 📋 Azure Web App Configuration
+
+#### **Required App Settings**
+Configure these in Azure Portal → App Service → Configuration → Application settings:
+
+| Setting Name | Value | Purpose |
+|-------------|-------|---------|
+| `WEBSITE_NODE_DEFAULT_VERSION` | `20-lts` | Specifies Node.js runtime version |
+| `SCM_DO_BUILD_DURING_DEPLOYMENT` | `false` | Prevents build during deployment (we deploy pre-built files) |
+| `WEBSITE_RUN_FROM_PACKAGE` | `1` | Runs from deployment package for better performance |
+
+#### **Startup Command Configuration**
+- **Location**: Azure Portal → App Service → Configuration → General settings → Startup Command
+- **Command**: `npx serve -s . -l 8080`
+- **Purpose**: Serves static React build files on port 8080 (Azure's default)
+
+#### **Why web.config is Required**
+The `web.config` file is essential for Windows-based Azure App Services:
+
+```xml
+<!-- Key features provided by web.config: -->
+1. **Static Content Serving**: Configures MIME types for .js, .css, .json files
+2. **React Router Support**: Rewrites all routes to index.html (SPA behavior)
+3. **Security Headers**: Adds X-Frame-Options and X-Content-Type-Options
+4. **Default Document**: Sets index.html as the default page
+5. **API Route Protection**: Excludes /api routes from SPA rewriting
+```
+
+### 🏗️ Building and Creating Deployment Packages
+
+#### **Step 1: Build the React Application**
 ```bash
-# Build and deploy to Azure Web App
-npm run build
-Compress-Archive -Path build/* -DestinationPath deploy-teams-auth.zip -Force
-az webapp deploy --resource-group rgconncentrix --name testsimple --src-path deploy-teams-auth.zip --type zip
+# Install dependencies (if not already done)
+npm install
 
-# Create Teams app package  
+# Create production build
+npm run build
+
+# Verify build contents
+ls build/
+# Should show: index.html, static/, auth-end.html, web.config, etc.
+```
+
+#### **Step 2: Create Azure Web App Deployment Package**
+```powershell
+# PowerShell command to create deployment zip
+Compress-Archive -Path "build\*" -DestinationPath "deploy-$(Get-Date -Format 'yyyyMMdd-HHmm').zip" -Force
+
+# Or use specific naming convention
+Compress-Archive -Path "build\*" -DestinationPath "deploy-login-improved.zip" -Force
+
+# Verify package contents
+Expand-Archive -Path "deploy-login-improved.zip" -DestinationPath "temp-verify" -Force
+ls temp-verify/
+Remove-Item -Path "temp-verify" -Recurse -Force
+```
+
+#### **Step 3: Deploy to Azure Web App**
+```bash
+# Login to Azure CLI (if not already logged in)
+az login
+
+# Set default subscription (optional)
+az account set --subscription "your-subscription-id"
+
+# Deploy the package
+az webapp deploy \
+  --resource-group rgconncentrix \
+  --name testsimple \
+  --src-path ./deploy-login-improved.zip \
+  --type zip
+
+# Alternative: Deploy with specific timeout
+az webapp deploy \
+  --resource-group rgconncentrix \
+  --name testsimple \
+  --src-path ./deploy-login-improved.zip \
+  --type zip \
+  --timeout 600
+```
+
+### 📱 Teams App Package Creation
+
+#### **Step 1: Prepare Teams Manifest**
+Ensure `teams-package/manifest.json` contains correct values:
+
+```json
+{
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "d136cbae-329b-4df5-a97a-9b22f97a7dd8",
+  "packageName": "com.concentrix.teamsimple",
+  "developer": {
+    "name": "Concentrix Teams App",
+    "websiteUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+    "privacyUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+    "termsOfUseUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net"
+  },
+  "name": {
+    "short": "Teams Simple Auth",
+    "full": "Teams Simple Authentication App"
+  },
+  "description": {
+    "short": "Simple Teams app with MSAL authentication",
+    "full": "A demonstration app showing Microsoft authentication in Teams context"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#FFFFFF",
+  "staticTabs": [
+    {
+      "entityId": "index",
+      "name": "Auth Demo",
+      "contentUrl": "https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+      "scopes": ["personal"]
+    }
+  ],
+  "permissions": ["identity"],
+  "validDomains": [
+    "testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net",
+    "login.microsoftonline.com"
+  ]
+}
+```
+
+#### **Step 2: Create Teams App Package**
+```powershell
+# Navigate to teams-package directory
 cd teams-package
-Compress-Archive -Path manifest.json,color.png,outline.png -DestinationPath ../TeamsApp-Auth-Fixed.zip -Force
+
+# Create the Teams app zip package
+Compress-Archive -Path "manifest.json", "color.png", "outline.png" -DestinationPath "../TeamsApp-Auth-$(Get-Date -Format 'yyyyMMdd').zip" -Force
+
+# Or use standard naming
+Compress-Archive -Path "manifest.json", "color.png", "outline.png" -DestinationPath "../TeamsApp-Auth-Fixed.zip" -Force
+
+# Return to root directory
+cd ..
+
+# Verify package was created
+ls *.zip
+```
+
+#### **Step 3: Deploy Teams App Package**
+
+##### **Option A: Teams Admin Center (Organization-wide)**
+1. Go to [Teams Admin Center](https://admin.teams.microsoft.com)
+2. Navigate to **Teams apps** → **Manage apps**
+3. Click **Upload new app** → **Upload an app to your org's app catalog**
+4. Select your `TeamsApp-Auth-Fixed.zip` file
+5. Configure permissions and availability
+
+##### **Option B: Teams Developer Portal (Development)**
+1. Go to [Teams Developer Portal](https://dev.teams.microsoft.com)
+2. Click **Apps** → **Import app**
+3. Upload your `TeamsApp-Auth-Fixed.zip` file
+4. Review and publish for testing
+
+##### **Option C: Sideloading (Testing)**
+1. Enable sideloading in Teams admin settings
+2. In Microsoft Teams client:
+   - Click **Apps** in the left sidebar
+   - Click **Manage your apps**
+   - Click **Upload an app** → **Upload a custom app**
+   - Select your `TeamsApp-Auth-Fixed.zip` file
+
+### 🔧 Complete Deployment Commands Reference
+
+#### **Full Build and Deploy Script (PowerShell)**
+```powershell
+# Complete deployment script
+Write-Host "🏗️ Building React application..." -ForegroundColor Green
+npm run build
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "✅ Build successful" -ForegroundColor Green
+    
+    # Create deployment package with timestamp
+    $timestamp = Get-Date -Format "yyyyMMdd-HHmm"
+    $deployPackage = "deploy-$timestamp.zip"
+    
+    Write-Host "📦 Creating deployment package: $deployPackage" -ForegroundColor Yellow
+    Compress-Archive -Path "build\*" -DestinationPath $deployPackage -Force
+    
+    Write-Host "🚀 Deploying to Azure Web App..." -ForegroundColor Blue
+    az webapp deploy --resource-group rgconncentrix --name testsimple --src-path $deployPackage --type zip
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ Deployment successful!" -ForegroundColor Green
+        Write-Host "🌐 Live URL: https://testsimple-fphefrckdtdwc2ez.westus3-01.azurewebsites.net" -ForegroundColor Cyan
+    } else {
+        Write-Host "❌ Deployment failed!" -ForegroundColor Red
+    }
+} else {
+    Write-Host "❌ Build failed!" -ForegroundColor Red
+}
+```
+
+#### **Teams Package Creation Script (PowerShell)**
+```powershell
+# Teams app package creation script
+Write-Host "📱 Creating Teams app package..." -ForegroundColor Green
+
+# Verify required files exist
+$requiredFiles = @("teams-package\manifest.json", "teams-package\color.png", "teams-package\outline.png")
+$allFilesExist = $true
+
+foreach ($file in $requiredFiles) {
+    if (-not (Test-Path $file)) {
+        Write-Host "❌ Missing required file: $file" -ForegroundColor Red
+        $allFilesExist = $false
+    }
+}
+
+if ($allFilesExist) {
+    cd teams-package
+    $teamsPackage = "..\TeamsApp-Auth-$(Get-Date -Format 'yyyyMMdd').zip"
+    Compress-Archive -Path "manifest.json", "color.png", "outline.png" -DestinationPath $teamsPackage -Force
+    cd ..
+    
+    Write-Host "✅ Teams package created: $teamsPackage" -ForegroundColor Green
+    Write-Host "📋 Next steps:" -ForegroundColor Yellow
+    Write-Host "  1. Upload to Teams Admin Center or Developer Portal" -ForegroundColor White
+    Write-Host "  2. Configure permissions and availability" -ForegroundColor White
+    Write-Host "  3. Test in Teams client" -ForegroundColor White
+} else {
+    Write-Host "❌ Cannot create Teams package - missing required files" -ForegroundColor Red
+}
+```
+
+### 📊 Deployment Verification Checklist
+
+#### **Azure Web App Verification**
+- [ ] App Service is running (Green status in Azure Portal)
+- [ ] Startup Command: `npx serve -s . -l 8080`
+- [ ] App Settings configured correctly
+- [ ] Custom Domain configured (if applicable)
+- [ ] SSL certificate active
+- [ ] Application Insights connected (optional)
+
+#### **Authentication Verification**
+- [ ] Azure AD App Registration redirect URIs include:
+  - `https://your-app.azurewebsites.net`
+  - `http://localhost:3000` (for development)
+  - `https://teams.microsoft.com/l/auth-callback`
+- [ ] Client ID matches in both Azure AD and Teams manifest
+- [ ] Tenant ID correctly configured
+- [ ] API permissions granted and admin consented
+
+#### **Teams App Verification**
+- [ ] Teams package uploads successfully
+- [ ] App appears in Teams app catalog
+- [ ] Authentication works within Teams context
+- [ ] No console errors in Teams client
+- [ ] Both personal and team scopes work (if configured)
+
+### 🔍 Troubleshooting Deployment Issues
+
+#### **Common Azure Web App Issues**
+
+| Issue | Symptoms | Solution |
+|-------|----------|----------|
+| **App won't start** | 502/503 errors | Check startup command and Node.js version |
+| **Routes don't work** | 404 on refresh | Verify web.config rewrite rules |
+| **Static files not served** | CSS/JS 404 errors | Check web.config MIME type configuration |
+| **Build files missing** | App shows empty page | Verify build folder contents before zip creation |
+
+#### **Common Teams App Issues**
+
+| Issue | Symptoms | Solution |
+|-------|----------|----------|
+| **Upload fails** | "Invalid package" error | Check manifest.json syntax and required files |
+| **Auth doesn't work** | Login loops or errors | Verify Azure AD redirect URIs and Teams manifest domains |
+| **App not visible** | Can't find app in Teams | Check app catalog deployment and permissions |
+| **Context errors** | "This call is only allowed..." | Ensure Teams SDK context detection is working |
+
+### 📈 Monitoring and Maintenance
+
+#### **Azure Application Insights (Recommended)**
+```bash
+# Enable Application Insights for monitoring
+az webapp config appsettings set \
+  --resource-group rgconncentrix \
+  --name testsimple \
+  --settings APPINSIGHTS_INSTRUMENTATIONKEY="your-instrumentation-key"
+```
+
+#### **Log Streaming**
+```bash
+# View real-time logs
+az webapp log tail --resource-group rgconncentrix --name testsimple
+
+# Download log files
+az webapp log download --resource-group rgconncentrix --name testsimple
+```
+
+## 📚 Additional Documentation
+
+### **Comprehensive Deployment Guide**
+For detailed deployment instructions, Azure Web App configuration, Teams package creation, and troubleshooting, see:
+- **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - Complete deployment documentation
+
+### **Quick Deployment Scripts**
+For ready-to-use PowerShell deployment functions, see:
+- **[deployment-scripts.ps1](./deployment-scripts.ps1)** - Automated deployment scripts
+
+#### **Using the Deployment Scripts**
+```powershell
+# Load the deployment functions
+. .\deployment-scripts.ps1
+
+# Full deployment (build + web app + Teams package)
+Full-Deployment
+
+# Just deploy web app
+Deploy-TeamsApp  
+
+# Just create Teams package
+New-TeamsPackage
+
+# Quick redeploy existing build
+Quick-Deploy
+
+# Check authentication and build status
+Test-AzureAuth
+Test-BuildOutput
 ```
 
 ## ❗ Troubleshooting
